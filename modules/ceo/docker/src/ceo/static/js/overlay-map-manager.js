@@ -215,9 +215,14 @@ let overlayMapManager = {
                     req['dataSet'] = data['sensorGroup'];
                     req['sceneIds'] = sceneIds.join();
                     req['targetDayOfYear'] = $.dayOfYear(data['targetDate']);
-                    if (data.hasOwnProperty('aoiCode') && data['aoiCode'] != null) {
+                    if (data.aoiCode) {
                         req['countryIso'] = data['aoiCode'];
-                    } else if (data.hasOwnProperty('polygon')) {
+                    } else if (data.aoiFusionTableKey) {
+                        req['aoiFusionTable'] = data['aoiFusionTable'];
+                        req['aoiFusionTableKeyColumn'] = data['aoiFusionTableKeyColumn'];
+                        req['aoiFusionTableKey'] = data['aoiFusionTableKey'];
+
+                    } else if (data.polygon) {
                         req['polygon'] = data['polygon'];
                     }
                     req['panSharpening'] = !!parseInt(overlay.sepalPansharpening);
