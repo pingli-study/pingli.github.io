@@ -22,7 +22,7 @@ class ImageSpec(object):
                 retry += 1
                 if retry > 9:
                     raise
-                logging.info('Retry ' + str(retry) + ' of requesting map id of ' + str(self))
+                logging.debug('Retry ' + str(retry) + ' of requesting map id of ' + str(self))
         logging.debug('Got map id of ' + str(self) + ': ' + str(ee_preview))
         return {
             'mapId': ee_preview['mapid'],

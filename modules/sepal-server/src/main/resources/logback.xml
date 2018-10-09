@@ -5,11 +5,11 @@
         </encoder>
     </appender>
 
-    <logger name="org.openforis" additivity="false" level="DEBUG">
-        <appender-ref ref="STDOUT"/>
-    </logger>
+    <!--<logger name="org.openforis" additivity="false" level="DEBUG">-->
+        <!--<appender-ref ref="STDOUT"/>-->
+    <!--</logger>-->
 
-    <!--<logger name="io.undertow" additivity="false" level="DEBUG">-->
+    <!--<logger name="io.undertow" additivity="false" level="INFO">-->
         <!--<appender-ref ref="STDOUT"/>-->
     <!--</logger>-->
 

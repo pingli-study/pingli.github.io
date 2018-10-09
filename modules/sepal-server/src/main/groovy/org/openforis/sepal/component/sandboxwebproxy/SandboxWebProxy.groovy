@@ -1,5 +1,6 @@
 package org.openforis.sepal.component.sandboxwebproxy
 
+
 import io.undertow.Handlers
 import io.undertow.Undertow
 import io.undertow.UndertowOptions
@@ -8,6 +9,7 @@ import io.undertow.server.HttpHandler
 import io.undertow.server.HttpServerExchange
 import io.undertow.server.ResponseCommitListener
 import io.undertow.server.handlers.ResponseCodeHandler
+import io.undertow.server.handlers.StuckThreadDetectionHandler
 import io.undertow.server.session.InMemorySessionManager
 import io.undertow.server.session.SessionAttachmentHandler
 import io.undertow.server.session.SessionCookieConfig
@@ -15,6 +17,7 @@ import io.undertow.server.session.SessionManager
 import io.undertow.util.HeaderMap
 import io.undertow.util.HttpString
 import org.openforis.sepal.component.sandboxwebproxy.api.SandboxSessionManager
+import org.openforis.sepal.undertow.ExchangeReportingHandler
 import org.openforis.sepal.util.NamedThreadFactory
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -35,17 +38,18 @@ import java.util.concurrent.TimeUnit
  * </ul>
  */
 class SandboxWebProxy {
-    private final static Logger LOG = LoggerFactory.getLogger(SandboxWebProxy)
 
     private final Undertow server
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(
-            NamedThreadFactory.singleThreadFactory('httpSessionMonitor')
+        NamedThreadFactory.singleThreadFactory('httpSessionMonitor')
     )
     private final int sessionHeartbeatInterval
 
     private final SessionManager httpSessionManager
     private final SandboxSessionManager sandboxSessionManager
     private final EndpointProvider endpointProvider
+
+    private ExchangeReportingHandler exchangeReportingHandler = null
 
     /**
      * Creates the proxy.
@@ -62,45 +66,53 @@ class SandboxWebProxy {
         endpointProvider = new EndpointProvider(httpSessionManager, sandboxSessionManager, portByEndpoint)
         def processorCount = Runtime.getRuntime().availableProcessors()
         this.server = Undertow.builder()
-                .addHttpListener(port, "0.0.0.0")
-                .setHandler(createHandler(portByEndpoint))
-                .setIoThreads(processorCount)
-                .setWorkerThreads(processorCount * 32)
-                .setSocketOption(Options.WRITE_TIMEOUT, 60 * 1000)
-                .setServerOption(UndertowOptions.REQUEST_PARSE_TIMEOUT, 60 * 1000)
-                .setServerOption(UndertowOptions.NO_REQUEST_TIMEOUT, 60 * 1000)
-                .build()
+            .addHttpListener(port, "0.0.0.0")
+            .setHandler(createHandler(portByEndpoint))
+            .setIoThreads(processorCount)
+            .setWorkerThreads(processorCount * 32)
+            .setWorkerThreads(1)
+            .setSocketOption(Options.WRITE_TIMEOUT, 40 * 1000)
+            .setServerOption(UndertowOptions.REQUEST_PARSE_TIMEOUT, 40 * 1000)
+            .setServerOption(UndertowOptions.NO_REQUEST_TIMEOUT, 40 * 1000)
+            .setServerOption(UndertowOptions.IDLE_TIMEOUT, 40 * 1000)
+            .build()
     }
 
     private HttpHandler createHandler(Map<String, Integer> portByEndpoint) {
         def pathHandler = Handlers.path(ResponseCodeHandler.HANDLE_404)
         def handler = new RedirectRewriteHandler(
-                new SandboxProxyHandler(endpointProvider)
+            new SandboxProxyHandler(endpointProvider)
         )
         portByEndpoint.keySet().each {
             pathHandler.addPrefixPath('/' + it, handler)
         }
         pathHandler.addExactPath('/start', new SandboxStartHandler(endpointProvider))
-        return new BadRequestCatchingHandler(
-                new LoggingHandler(
+
+        exchangeReportingHandler = new ExchangeReportingHandler(
+            new StuckThreadDetectionHandler(
+                new BadRequestCatchingHandler(
+                    new LoggingHandler(
                         new SessionAttachmentHandler(
-                                pathHandler,
-                                httpSessionManager,
-                                new SessionCookieConfig(cookieName: "SANDBOX-SESSIONID", secure: false))))
+                            pathHandler,
+                            httpSessionManager,
+                            new SessionCookieConfig(cookieName: "SANDBOX-SESSIONID", secure: false))))))
+        return exchangeReportingHandler
     }
 
     void start() {
         server.start()
+        exchangeReportingHandler.scheduleReport()
         executor.scheduleWithFixedDelay(
-                endpointProvider.heartbeatSender(),
-                sessionHeartbeatInterval,
-                sessionHeartbeatInterval, TimeUnit.SECONDS
+            endpointProvider.heartbeatSender(),
+            sessionHeartbeatInterval,
+            sessionHeartbeatInterval, TimeUnit.SECONDS
         )
     }
 
     void stop() {
         executor.shutdown()
-        server.stop()
+        exchangeReportingHandler?.stop()
+        server?.stop()
     }
 
     private static class LoggingHandler implements HttpHandler {

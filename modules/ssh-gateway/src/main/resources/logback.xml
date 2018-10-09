@@ -5,9 +5,9 @@
         <suffixPattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger - %msg%n</suffixPattern>
     </appender>
 
-    <logger name="org.openforis" additivity="false" level="DEBUG">
-        <appender-ref ref="SYSLOG"/>
-    </logger>
+    <!--<logger name="org.openforis" additivity="false" level="DEBUG">-->
+        <!--<appender-ref ref="SYSLOG"/>-->
+    <!--</logger>-->
 
     <root level="INFO">
         <appender-ref ref="SYSLOG"/>

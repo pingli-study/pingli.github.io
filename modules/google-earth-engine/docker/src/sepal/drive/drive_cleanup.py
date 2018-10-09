@@ -42,7 +42,7 @@ class DriveCleanup:
             logger.exception('Failed to delete old drive files')
 
     def _delete_old(self):
-        logger.info("Searching for old drive folders")
+        logger.debug("Searching for old drive folders")
         now = datetime.utcnow()
         max_folder_modification = (now - timedelta(minutes=MAX_FOLDER_AGE_MINS)).isoformat("T")
         query = "mimeType = 'application/vnd.google-apps.folder' and modifiedTime <= '{}'" \
@@ -51,5 +51,5 @@ class DriveCleanup:
         files = results.get('files', [])
         for file in files:
             file_id = file['id']
-            logger.info("Deleting old folder. id=" + file_id + ', name=' + file['name'])
+            logger.debug("Deleting old folder. id=" + file_id + ', name=' + file['name'])
             self.drive.files().delete(fileId=file_id).execute()

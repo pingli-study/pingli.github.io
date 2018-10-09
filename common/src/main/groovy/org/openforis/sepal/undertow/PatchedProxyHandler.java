@@ -1,6 +1,7 @@
 package org.openforis.sepal.undertow;
 
 import io.undertow.UndertowLogger;
+import io.undertow.UndertowMessages;
 import io.undertow.attribute.ExchangeAttribute;
 import io.undertow.attribute.ExchangeAttributes;
 import io.undertow.client.*;
@@ -9,8 +10,7 @@ import io.undertow.io.Sender;
 import io.undertow.predicate.IdempotentPredicate;
 import io.undertow.predicate.Predicate;
 import io.undertow.server.*;
-import io.undertow.server.handlers.builder.HandlerBuilder;
-import io.undertow.server.handlers.proxy.LoadBalancingProxyClient;
+import io.undertow.server.handlers.ResponseCodeHandler;
 import io.undertow.server.handlers.proxy.ProxyCallback;
 import io.undertow.server.handlers.proxy.ProxyClient;
 import io.undertow.server.handlers.proxy.ProxyConnection;
@@ -28,11 +28,10 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.channels.Channel;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.Collections;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -42,6 +41,8 @@ import java.util.concurrent.TimeUnit;
  * knows how to proxy the request. If it does then it will provide a connection that can
  * used to connect to the remote server, otherwise the next handler will be invoked and the
  * request will proceed as normal.
+ * <p>
+ * This handler uses non blocking IO
  *
  * @author <a href="mailto:david.lloyd@redhat.com">David M. Lloyd</a>
  */
@@ -52,12 +53,13 @@ public final class PatchedProxyHandler implements HttpHandler {
     private static final Logger log = Logger.getLogger(PatchedProxyHandler.class.getPackage().getName());
 
     public static final String UTF_8 = StandardCharsets.UTF_8.name();
-    private final ProxyClient proxyClient;
-    private final int maxRequestTime;
 
     private static final AttachmentKey<ProxyConnection> CONNECTION = AttachmentKey.create(ProxyConnection.class);
     private static final AttachmentKey<HttpServerExchange> EXCHANGE = AttachmentKey.create(HttpServerExchange.class);
     private static final AttachmentKey<XnioExecutor.Key> TIMEOUT_KEY = AttachmentKey.create(XnioExecutor.Key.class);
+
+    private final ProxyClient proxyClient;
+    private final int maxRequestTime;
 
     /**
      * Map of additional headers to add to the request.
@@ -70,8 +72,9 @@ public final class PatchedProxyHandler implements HttpHandler {
     private volatile boolean reuseXForwarded;
     private volatile int maxConnectionRetries;
 
-    private final Predicate idempotentRequestPredicate = IdempotentPredicate.INSTANCE;
+    private final Predicate idempotentRequestPredicate;
 
+    @Deprecated
     public PatchedProxyHandler(ProxyClient proxyClient, int maxRequestTime, HttpHandler next) {
         this(proxyClient, maxRequestTime, next, false, false);
     }
@@ -83,6 +86,7 @@ public final class PatchedProxyHandler implements HttpHandler {
      * @param rewriteHostHeader should the HOST header be rewritten to use the target host of the call.
      * @param reuseXForwarded   should any existing X-Forwarded-For header be used or should it be overwritten.
      */
+    @Deprecated
     public PatchedProxyHandler(ProxyClient proxyClient, int maxRequestTime, HttpHandler next, boolean rewriteHostHeader, boolean reuseXForwarded) {
         this(proxyClient, maxRequestTime, next, rewriteHostHeader, reuseXForwarded, DEFAULT_MAX_RETRY_ATTEMPTS);
     }
@@ -95,6 +99,7 @@ public final class PatchedProxyHandler implements HttpHandler {
      * @param reuseXForwarded      should any existing X-Forwarded-For header be used or should it be overwritten.
      * @param maxConnectionRetries
      */
+    @Deprecated
     public PatchedProxyHandler(ProxyClient proxyClient, int maxRequestTime, HttpHandler next, boolean rewriteHostHeader, boolean reuseXForwarded, int maxConnectionRetries) {
         this.proxyClient = proxyClient;
         this.maxRequestTime = maxRequestTime;
@@ -102,11 +107,25 @@ public final class PatchedProxyHandler implements HttpHandler {
         this.rewriteHostHeader = rewriteHostHeader;
         this.reuseXForwarded = reuseXForwarded;
         this.maxConnectionRetries = maxConnectionRetries;
+        this.idempotentRequestPredicate = IdempotentPredicate.INSTANCE;
     }
 
-
+    @Deprecated
     public PatchedProxyHandler(ProxyClient proxyClient, HttpHandler next) {
         this(proxyClient, -1, next);
+    }
+
+    PatchedProxyHandler(Builder builder) {
+        this.proxyClient = builder.proxyClient;
+        this.maxRequestTime = builder.maxRequestTime;
+        this.next = builder.next;
+        this.rewriteHostHeader = builder.rewriteHostHeader;
+        this.reuseXForwarded = builder.reuseXForwarded;
+        this.maxConnectionRetries = builder.maxConnectionRetries;
+        this.idempotentRequestPredicate = builder.idempotentRequestPredicate;
+        for (Map.Entry<HttpString, ExchangeAttribute> e : builder.requestHeaders.entrySet()) {
+            requestHeaders.put(e.getKey(), e.getValue());
+        }
     }
 
     public void handleRequest(final HttpServerExchange exchange) throws Exception {
@@ -128,7 +147,7 @@ public final class PatchedProxyHandler implements HttpHandler {
         if (target instanceof ProxyClient.MaxRetriesProxyTarget) {
             maxRetries = Math.max(maxRetries, ((ProxyClient.MaxRetriesProxyTarget) target).getMaxRetries());
         }
-        final PatchedProxyHandler.ProxyClientHandler clientHandler = new PatchedProxyHandler.ProxyClientHandler(exchange, target, timeout, maxRetries, idempotentRequestPredicate);
+        final ProxyClientHandler clientHandler = new ProxyClientHandler(exchange, target, timeout, maxRetries, idempotentRequestPredicate);
         if (timeout > 0) {
             final XnioExecutor.Key key = WorkerUtils.executeAfter(exchange.getIoThread(), new Runnable() {
                 @Override
@@ -156,6 +175,7 @@ public final class PatchedProxyHandler implements HttpHandler {
      * @param attribute The header value attribute.
      * @return this
      */
+    @Deprecated
     public PatchedProxyHandler addRequestHeader(final HttpString header, final ExchangeAttribute attribute) {
         requestHeaders.put(header, attribute);
         return this;
@@ -169,6 +189,7 @@ public final class PatchedProxyHandler implements HttpHandler {
      * @param value  The header value attribute.
      * @return this
      */
+    @Deprecated
     public PatchedProxyHandler addRequestHeader(final HttpString header, final String value) {
         requestHeaders.put(header, ExchangeAttributes.constant(value));
         return this;
@@ -185,6 +206,7 @@ public final class PatchedProxyHandler implements HttpHandler {
      * @param attribute The header value attribute.
      * @return this
      */
+    @Deprecated
     public PatchedProxyHandler addRequestHeader(final HttpString header, final String attribute, final ClassLoader classLoader) {
         requestHeaders.put(header, ExchangeAttributes.parser(classLoader).parse(attribute));
         return this;
@@ -196,6 +218,7 @@ public final class PatchedProxyHandler implements HttpHandler {
      * @param header the header
      * @return this
      */
+    @Deprecated
     public PatchedProxyHandler removeRequestHeader(final HttpString header) {
         requestHeaders.remove(header);
         return this;
@@ -245,7 +268,7 @@ public final class PatchedProxyHandler implements HttpHandler {
         @Override
         public void completed(final HttpServerExchange exchange, final ProxyConnection connection) {
             exchange.putAttachment(CONNECTION, connection);
-            exchange.dispatch(SameThreadExecutor.INSTANCE, new PatchedProxyHandler.ProxyAction(connection, exchange, requestHeaders, rewriteHostHeader, reuseXForwarded, exchange.isRequestComplete() ? this : null, idempotentPredicate));
+            exchange.dispatch(SameThreadExecutor.INSTANCE, new ProxyAction(connection, exchange, requestHeaders, rewriteHostHeader, reuseXForwarded, exchange.isRequestComplete() ? this : null, idempotentPredicate));
         }
 
         @Override
@@ -275,7 +298,6 @@ public final class PatchedProxyHandler implements HttpHandler {
 
         @Override
         public void couldNotResolveBackend(HttpServerExchange exchange) {
-            log.warn("Could not resolve backend. target: " + target + ", exchange: " + exchange);
             if (exchange.isResponseStarted()) {
                 IoUtils.safeClose(exchange.getConnection());
             } else {
@@ -296,7 +318,6 @@ public final class PatchedProxyHandler implements HttpHandler {
             if (exchange.isResponseStarted()) {
                 IoUtils.safeClose(exchange.getConnection());
             } else {
-                log.info("Cancelling request, returning 503. exchange: " + exchange);
                 exchange.setStatusCode(StatusCodes.SERVICE_UNAVAILABLE);
                 exchange.endExchange();
             }
@@ -310,11 +331,11 @@ public final class PatchedProxyHandler implements HttpHandler {
         private final Map<HttpString, ExchangeAttribute> requestHeaders;
         private final boolean rewriteHostHeader;
         private final boolean reuseXForwarded;
-        private final PatchedProxyHandler.ProxyClientHandler proxyClientHandler;
+        private final ProxyClientHandler proxyClientHandler;
         private final Predicate idempotentPredicate;
 
         ProxyAction(final ProxyConnection clientConnection, final HttpServerExchange exchange, Map<HttpString, ExchangeAttribute> requestHeaders,
-                    boolean rewriteHostHeader, boolean reuseXForwarded, PatchedProxyHandler.ProxyClientHandler proxyClientHandler, Predicate idempotentPredicate) {
+                    boolean rewriteHostHeader, boolean reuseXForwarded, ProxyClientHandler proxyClientHandler, Predicate idempotentPredicate) {
             this.clientConnection = clientConnection;
             this.exchange = exchange;
             this.requestHeaders = requestHeaders;
@@ -332,8 +353,10 @@ public final class PatchedProxyHandler implements HttpHandler {
             if (exchange.isHostIncludedInRequestURI()) {
                 int uriPart = targetURI.indexOf("//");
                 if (uriPart != -1) {
-                    uriPart = targetURI.indexOf("/", uriPart);
-                    targetURI = targetURI.substring(uriPart);
+                    uriPart = targetURI.indexOf("/", uriPart + 2);
+                    if (uriPart != -1) {
+                        targetURI = targetURI.substring(uriPart);
+                    }
                 }
             }
 
@@ -381,8 +404,8 @@ public final class PatchedProxyHandler implements HttpHandler {
                 }
             }
             final String remoteHost;
-            final SocketAddress address = exchange.getConnection().getPeerAddress();
-            if (address != null && address instanceof InetSocketAddress) {
+            final SocketAddress address = exchange.getSourceAddress();
+            if (address != null) {
                 remoteHost = ((InetSocketAddress) address).getHostString();
                 if (!((InetSocketAddress) address).isUnresolved()) {
                     request.putAttachment(ProxiedRequestAttachments.REMOTE_ADDRESS, ((InetSocketAddress) address).getAddress().getHostAddress());
@@ -477,15 +500,25 @@ public final class PatchedProxyHandler implements HttpHandler {
                 request.getRequestHeaders().put(Headers.HOST, targetAddress.getHostString() + ":" + targetAddress.getPort());
                 request.getRequestHeaders().put(Headers.X_FORWARDED_HOST, exchange.getRequestHeaders().getFirst(Headers.HOST));
             }
-            if (log.isTraceEnabled()) {
-                log.tracef("Sending request %s to target %s for exchange %s", request, clientConnection.getConnection().getPeerAddress(), exchange);
+            if (log.isDebugEnabled()) {
+                log.debugf("Sending request %s to target %s for exchange %s", request, clientConnection.getConnection().getPeerAddress(), exchange);
             }
+            //handle content
+            //if the frontend is HTTP/2 then we may need to add a Transfer-Encoding header, to indicate to the backend
+            //that there is content
+            if (!request.getRequestHeaders().contains(Headers.TRANSFER_ENCODING) && !request.getRequestHeaders().contains(Headers.CONTENT_LENGTH)) {
+                if (!exchange.isRequestComplete()) {
+                    request.getRequestHeaders().put(Headers.TRANSFER_ENCODING, Headers.CHUNKED.toString());
+                }
+            }
+
+
             clientConnection.getConnection().sendRequest(request, new ClientCallback<ClientExchange>() {
                 @Override
                 public void completed(final ClientExchange result) {
 
-                    if (log.isTraceEnabled()) {
-                        log.tracef("Sent request %s to target %s for exchange %s", request, remoteHost, exchange);
+                    if (log.isDebugEnabled()) {
+                        log.debugf("Sent request %s to target %s for exchange %s", request, remoteHost, exchange);
                     }
                     result.putAttachment(EXCHANGE, exchange);
 
@@ -533,7 +566,7 @@ public final class PatchedProxyHandler implements HttpHandler {
                                             path = path.substring(0, i);
                                         }
 
-                                        exchange.dispatch(SameThreadExecutor.INSTANCE, new PatchedProxyHandler.ProxyAction(new ProxyConnection(pushedRequest.getConnection(), path), exchange, requestHeaders, rewriteHostHeader, reuseXForwarded, null, idempotentPredicate));
+                                        exchange.dispatch(SameThreadExecutor.INSTANCE, new ProxyAction(new ProxyConnection(pushedRequest.getConnection(), path), exchange, requestHeaders, rewriteHostHeader, reuseXForwarded, null, idempotentPredicate));
                                     }
                                 });
                                 return true;
@@ -542,15 +575,15 @@ public final class PatchedProxyHandler implements HttpHandler {
                     }
 
 
-                    result.setResponseListener(new PatchedProxyHandler.ResponseCallback(exchange, proxyClientHandler, idempotentPredicate));
-                    final PatchedProxyHandler.IoExceptionHandler handler = new PatchedProxyHandler.IoExceptionHandler(exchange, clientConnection.getConnection());
+                    result.setResponseListener(new ResponseCallback(exchange, proxyClientHandler, idempotentPredicate));
+                    final IoExceptionHandler handler = new IoExceptionHandler(exchange, clientConnection.getConnection());
                     if (requiresContinueResponse) {
                         try {
                             if (!result.getRequestChannel().flush()) {
                                 result.getRequestChannel().getWriteSetter().set(ChannelListeners.flushingChannelListener(new ChannelListener<StreamSinkChannel>() {
                                     @Override
                                     public void handleEvent(StreamSinkChannel channel) {
-                                        Transfer.initiateTransfer(exchange.getRequestChannel(), result.getRequestChannel(), ChannelListeners.closingChannelListener(), new PatchedProxyHandler.HTTPTrailerChannelListener(exchange, result, exchange, proxyClientHandler, idempotentPredicate), handler, handler, exchange.getConnection().getByteBufferPool());
+                                        Transfer.initiateTransfer(exchange.getRequestChannel(), result.getRequestChannel(), ChannelListeners.closingChannelListener(), new HTTPTrailerChannelListener(exchange, result, exchange, proxyClientHandler, idempotentPredicate), handler, handler, exchange.getConnection().getByteBufferPool());
 
                                     }
                                 }, handler));
@@ -561,7 +594,7 @@ public final class PatchedProxyHandler implements HttpHandler {
                             handler.handleException(result.getRequestChannel(), e);
                         }
                     }
-                    PatchedProxyHandler.HTTPTrailerChannelListener trailerListener = new PatchedProxyHandler.HTTPTrailerChannelListener(exchange, result, exchange, proxyClientHandler, idempotentPredicate);
+                    HTTPTrailerChannelListener trailerListener = new HTTPTrailerChannelListener(exchange, result, exchange, proxyClientHandler, idempotentPredicate);
                     if (!exchange.isRequestComplete()) {
                         Transfer.initiateTransfer(exchange.getRequestChannel(), result.getRequestChannel(), ChannelListeners.closingChannelListener(), trailerListener, handler, handler, exchange.getConnection().getByteBufferPool());
                     } else {
@@ -580,8 +613,7 @@ public final class PatchedProxyHandler implements HttpHandler {
         }
     }
 
-    static void handleFailure(HttpServerExchange exchange, PatchedProxyHandler.ProxyClientHandler proxyClientHandler, Predicate idempotentRequestPredicate, IOException e) {
-        log.warn("Proxy request failed. exchange: " + exchange, e);
+    static void handleFailure(HttpServerExchange exchange, ProxyClientHandler proxyClientHandler, Predicate idempotentRequestPredicate, IOException e) {
         UndertowLogger.PROXY_REQUEST_LOGGER.proxyRequestFailed(exchange.getRequestURI(), e);
         if (exchange.isResponseStarted()) {
             IoUtils.safeClose(exchange.getConnection());
@@ -596,10 +628,10 @@ public final class PatchedProxyHandler implements HttpHandler {
     private static final class ResponseCallback implements ClientCallback<ClientExchange> {
 
         private final HttpServerExchange exchange;
-        private final PatchedProxyHandler.ProxyClientHandler proxyClientHandler;
+        private final ProxyClientHandler proxyClientHandler;
         private final Predicate idempotentPredicate;
 
-        private ResponseCallback(HttpServerExchange exchange, PatchedProxyHandler.ProxyClientHandler proxyClientHandler, Predicate idempotentPredicate) {
+        private ResponseCallback(HttpServerExchange exchange, ProxyClientHandler proxyClientHandler, Predicate idempotentPredicate) {
             this.exchange = exchange;
             this.proxyClientHandler = proxyClientHandler;
             this.idempotentPredicate = idempotentPredicate;
@@ -610,8 +642,8 @@ public final class PatchedProxyHandler implements HttpHandler {
 
             final ClientResponse response = result.getResponse();
 
-            if (log.isTraceEnabled()) {
-                log.tracef("Received response %s for request %s for exchange %s", response, result.getRequest(), exchange);
+            if (log.isDebugEnabled()) {
+                log.debugf("Received response %s for request %s for exchange %s", response, result.getRequest(), exchange);
             }
             final HeaderMap inboundResponseHeaders = response.getResponseHeaders();
             final HeaderMap outboundResponseHeaders = exchange.getResponseHeaders();
@@ -631,7 +663,7 @@ public final class PatchedProxyHandler implements HttpHandler {
                         try {
                             clientChannel = result.getConnection().performUpgrade();
 
-                            final PatchedProxyHandler.ClosingExceptionHandler handler = new PatchedProxyHandler.ClosingExceptionHandler(streamConnection, clientChannel);
+                            final ClosingExceptionHandler handler = new ClosingExceptionHandler(streamConnection, clientChannel);
                             Transfer.initiateTransfer(clientChannel.getSourceChannel(), streamConnection.getSinkChannel(), ChannelListeners.closingChannelListener(), ChannelListeners.writeShutdownChannelListener(ChannelListeners.<StreamSinkChannel>flushingChannelListener(ChannelListeners.closingChannelListener(), ChannelListeners.closingChannelExceptionHandler()), ChannelListeners.closingChannelExceptionHandler()), handler, handler, result.getConnection().getBufferPool());
                             Transfer.initiateTransfer(streamConnection.getSourceChannel(), clientChannel.getSinkChannel(), ChannelListeners.closingChannelListener(), ChannelListeners.writeShutdownChannelListener(ChannelListeners.<StreamSinkChannel>flushingChannelListener(ChannelListeners.closingChannelListener(), ChannelListeners.closingChannelExceptionHandler()), ChannelListeners.closingChannelExceptionHandler()), handler, handler, result.getConnection().getBufferPool());
 
@@ -641,8 +673,8 @@ public final class PatchedProxyHandler implements HttpHandler {
                     }
                 });
             }
-            final PatchedProxyHandler.IoExceptionHandler handler = new PatchedProxyHandler.IoExceptionHandler(exchange, result.getConnection());
-            Transfer.initiateTransfer(result.getResponseChannel(), exchange.getResponseChannel(), ChannelListeners.closingChannelListener(), new PatchedProxyHandler.HTTPTrailerChannelListener(result, exchange, exchange, proxyClientHandler, idempotentPredicate), handler, handler, exchange.getConnection().getByteBufferPool());
+            final IoExceptionHandler handler = new IoExceptionHandler(exchange, result.getConnection());
+            Transfer.initiateTransfer(result.getResponseChannel(), exchange.getResponseChannel(), ChannelListeners.closingChannelListener(), new HTTPTrailerChannelListener(result, exchange, exchange, proxyClientHandler, idempotentPredicate), handler, handler, exchange.getConnection().getByteBufferPool());
         }
 
         @Override
@@ -656,10 +688,10 @@ public final class PatchedProxyHandler implements HttpHandler {
         private final Attachable source;
         private final Attachable target;
         private final HttpServerExchange exchange;
-        private final PatchedProxyHandler.ProxyClientHandler proxyClientHandler;
+        private final ProxyClientHandler proxyClientHandler;
         private final Predicate idempotentPredicate;
 
-        private HTTPTrailerChannelListener(final Attachable source, final Attachable target, HttpServerExchange exchange, PatchedProxyHandler.ProxyClientHandler proxyClientHandler, Predicate idempotentPredicate) {
+        private HTTPTrailerChannelListener(final Attachable source, final Attachable target, HttpServerExchange exchange, ProxyClientHandler proxyClientHandler, Predicate idempotentPredicate) {
             this.source = source;
             this.target = target;
             this.exchange = exchange;
@@ -727,6 +759,7 @@ public final class PatchedProxyHandler implements HttpHandler {
         }
     }
 
+    @Deprecated
     public PatchedProxyHandler setMaxConnectionRetries(int maxConnectionRetries) {
         this.maxConnectionRetries = maxConnectionRetries;
         return this;
@@ -736,6 +769,7 @@ public final class PatchedProxyHandler implements HttpHandler {
         return rewriteHostHeader;
     }
 
+    @Deprecated
     public PatchedProxyHandler setRewriteHostHeader(boolean rewriteHostHeader) {
         this.rewriteHostHeader = rewriteHostHeader;
         return this;
@@ -745,6 +779,7 @@ public final class PatchedProxyHandler implements HttpHandler {
         return reuseXForwarded;
     }
 
+    @Deprecated
     public PatchedProxyHandler setReuseXForwarded(boolean reuseXForwarded) {
         this.reuseXForwarded = reuseXForwarded;
         return this;
@@ -774,67 +809,107 @@ public final class PatchedProxyHandler implements HttpHandler {
         }
     }
 
-    public static class Builder implements HandlerBuilder {
-
-        @Override
-        public String name() {
-            return "reverse-proxy";
-        }
-
-        @Override
-        public Map<String, Class<?>> parameters() {
-            Map<String, Class<?>> params = new HashMap<>();
-            params.put("hosts", String[].class);
-            params.put("rewrite-host-header", Boolean.class);
-            return params;
-        }
-
-        @Override
-        public Set<String> requiredParameters() {
-            return Collections.singleton("hosts");
-        }
-
-        @Override
-        public String defaultParameter() {
-            return "hosts";
-        }
-
-        @Override
-        public HandlerWrapper build(Map<String, Object> config) {
-            String[] hosts = (String[]) config.get("hosts");
-            List<URI> uris = new ArrayList<>();
-            for (String host : hosts) {
-                try {
-                    uris.add(new URI(host));
-                } catch (URISyntaxException e) {
-                    throw new RuntimeException(e);
-                }
-            }
-            Boolean rewriteHostHeader = (Boolean) config.get("rewrite-host-header");
-            return new PatchedProxyHandler.Wrapper(uris, rewriteHostHeader);
-        }
-
+    public static Builder builder() {
+        return new Builder();
     }
 
-    private static class Wrapper implements HandlerWrapper {
+    public static class Builder {
 
-        private final List<URI> uris;
-        private final boolean rewriteHostHeader;
+        private ProxyClient proxyClient;
+        private int maxRequestTime = -1;
+        private final Map<HttpString, ExchangeAttribute> requestHeaders = new CopyOnWriteMap<>();
+        private HttpHandler next = ResponseCodeHandler.HANDLE_404;
+        private boolean rewriteHostHeader;
+        private boolean reuseXForwarded;
+        private int maxConnectionRetries = DEFAULT_MAX_RETRY_ATTEMPTS;
+        private Predicate idempotentRequestPredicate = IdempotentPredicate.INSTANCE;
 
-        private Wrapper(List<URI> uris, Boolean rewriteHostHeader) {
-            this.uris = uris;
-            this.rewriteHostHeader = rewriteHostHeader != null && rewriteHostHeader;
+        Builder() {
         }
 
-        @Override
-        public HttpHandler wrap(HttpHandler handler) {
-            final LoadBalancingProxyClient loadBalancingProxyClient = new LoadBalancingProxyClient();
-            for (URI url : uris) {
-                loadBalancingProxyClient.addHost(url);
-            }
-            final ProxyClient proxyClient = loadBalancingProxyClient;
+        ;
 
-            return new PatchedProxyHandler(proxyClient, -1, handler, rewriteHostHeader, false);
+
+        public ProxyClient getProxyClient() {
+            return proxyClient;
+        }
+
+        public Builder setProxyClient(ProxyClient proxyClient) {
+            if (proxyClient == null) {
+                throw UndertowMessages.MESSAGES.argumentCannotBeNull("proxyClient");
+            }
+            this.proxyClient = proxyClient;
+            return this;
+        }
+
+        public int getMaxRequestTime() {
+            return maxRequestTime;
+        }
+
+        public Builder setMaxRequestTime(int maxRequestTime) {
+            this.maxRequestTime = maxRequestTime;
+            return this;
+        }
+
+        public Map<HttpString, ExchangeAttribute> getRequestHeaders() {
+            return Collections.unmodifiableMap(requestHeaders);
+        }
+
+        public Builder addRequestHeader(HttpString header, ExchangeAttribute value) {
+            this.requestHeaders.put(header, value);
+            return this;
+        }
+
+        public HttpHandler getNext() {
+            return next;
+        }
+
+        public Builder setNext(HttpHandler next) {
+            this.next = next;
+            return this;
+        }
+
+        public boolean isRewriteHostHeader() {
+            return rewriteHostHeader;
+        }
+
+        public Builder setRewriteHostHeader(boolean rewriteHostHeader) {
+            this.rewriteHostHeader = rewriteHostHeader;
+            return this;
+        }
+
+        public boolean isReuseXForwarded() {
+            return reuseXForwarded;
+        }
+
+        public Builder setReuseXForwarded(boolean reuseXForwarded) {
+            this.reuseXForwarded = reuseXForwarded;
+            return this;
+        }
+
+        public int getMaxConnectionRetries() {
+            return maxConnectionRetries;
+        }
+
+        public Builder setMaxConnectionRetries(int maxConnectionRetries) {
+            this.maxConnectionRetries = maxConnectionRetries;
+            return this;
+        }
+
+        public Predicate getIdempotentRequestPredicate() {
+            return idempotentRequestPredicate;
+        }
+
+        public Builder setIdempotentRequestPredicate(Predicate idempotentRequestPredicate) {
+            if (idempotentRequestPredicate == null) {
+                throw UndertowMessages.MESSAGES.argumentCannotBeNull("idempotentRequestPredicate");
+            }
+            this.idempotentRequestPredicate = idempotentRequestPredicate;
+            return this;
+        }
+
+        public PatchedProxyHandler build() {
+            return new PatchedProxyHandler(this);
         }
     }
 }

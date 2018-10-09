@@ -12,7 +12,8 @@ import io.undertow.server.handlers.PathHandler
 import io.undertow.server.handlers.ResponseCodeHandler
 import io.undertow.server.handlers.encoding.ContentEncodingRepository
 import io.undertow.server.handlers.encoding.EncodingHandler
-import io.undertow.server.handlers.proxy.LoadBalancingProxyClient
+import io.undertow.server.handlers.encoding.GzipEncodingProvider
+import io.undertow.server.handlers.proxy.PatchedLoadBalancingProxyClient
 import io.undertow.server.session.InMemorySessionManager
 import io.undertow.server.session.SessionAttachmentHandler
 import io.undertow.server.session.SessionCookieConfig
@@ -21,7 +22,6 @@ import io.undertow.util.Headers
 import io.undertow.util.HttpString
 import org.apache.http.conn.ssl.TrustSelfSignedStrategy
 import org.apache.http.ssl.SSLContextBuilder
-import org.openforis.sepal.undertow.PatchedGzipEncodingProvider
 import org.openforis.sepal.undertow.PatchedProxyHandler
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -61,32 +61,32 @@ class RootHandler implements HttpHandler {
             endpointHandler = new CachedHandler(endpointHandler)
         if (endpointConfig.noCache)
             endpointHandler = new NoCacheHandler(endpointHandler)
-//        endpointHandler = gzipHandler(endpointHandler)
+        endpointHandler = gzipHandler(endpointHandler)
         def sessionConfig = new SessionCookieConfig(cookieName: "SEPAL-SESSIONID", secure: endpointConfig.https)
         endpointHandler = new SessionAttachmentHandler(endpointHandler, sessionManager, sessionConfig)
         endpointConfig.prefix ?
-                handler.addPrefixPath(endpointConfig.path, endpointHandler) :
-                handler.addExactPath(endpointConfig.path, endpointHandler)
+            handler.addPrefixPath(endpointConfig.path, endpointHandler) :
+            handler.addExactPath(endpointConfig.path, endpointHandler)
         return this
     }
 
     private EncodingHandler gzipHandler(HttpHandler endpointHandler) {
         return new EncodingHandler(
-                new ContentEncodingRepository().addEncodingHandler(
-                        "gzip",
-                        new PatchedGzipEncodingProvider(),
-                        50,
-                        Predicates.contains(ExchangeAttributes.responseHeader(Headers.CONTENT_TYPE),
-                                'text/plain',
-                                'text/css',
-                                'text/javascript',
-                                'application/json',
-                                'application/javascript',
-                                'application/x-javascript',
-                                'text/xml',
-                                'application/xml',
-                                'application/xml+rss')
-                )).setNext(endpointHandler)
+            new ContentEncodingRepository().addEncodingHandler(
+                "gzip",
+                new GzipEncodingProvider(),
+                50,
+                Predicates.contains(ExchangeAttributes.responseHeader(Headers.CONTENT_TYPE),
+                    'text/plain',
+                    'text/css',
+                    'text/javascript',
+                    'application/json',
+                    'application/javascript',
+                    'application/x-javascript',
+                    'text/xml',
+                    'application/xml',
+                    'application/xml+rss')
+            )).setNext(endpointHandler)
     }
 
     void handleRequest(HttpServerExchange exchange) throws Exception {
@@ -130,9 +130,9 @@ class RootHandler implements HttpHandler {
         void handleRequest(HttpServerExchange exchange) throws Exception {
             LOG.debug("Logging out: $exchange")
             exchange.requestCookies
-                    .findAll { it.key.endsWith('SESSIONID') }
-                    .collect { it.value }
-                    .each {
+                .findAll { it.key.endsWith('SESSIONID') }
+                .collect { it.value }
+                .each {
                 it.value = ''
                 it.path = '/'
                 it.maxAge = 0
@@ -155,31 +155,28 @@ class RootHandler implements HttpHandler {
             this.host = host
             target = endpointConfig.target.toString().replaceAll('/$', '') // Remove trailing slashes
             def sslContext = new SSLContextBuilder()
-                    .loadTrustMaterial(null, new TrustSelfSignedStrategy())
-                    .build()
+                .loadTrustMaterial(null, new TrustSelfSignedStrategy())
+                .build()
             def xnioSsl = new UndertowXnioSsl(Xnio.getInstance(), OptionMap.EMPTY, sslContext)
-            def proxyClient = new LoadBalancingProxyClient(
-                    maxQueueSize: 4096,
-                    connectionsPerThread: 20,
-                    softMaxConnectionsPerThread: 10
+            def proxyClient = new PatchedLoadBalancingProxyClient(
+                maxQueueSize: 4096,
+                connectionsPerThread: 20,
+                softMaxConnectionsPerThread: 10,
+                ttl: 30 * 1000
             )
             proxyClient.addHost(URI.create(target), xnioSsl)
-            proxyClient.ttl = 30 * 1000
-            proxyHandler = new PatchedProxyHandler(
-                    proxyClient,
-                    -1,
-                    ResponseCodeHandler.HANDLE_404,
-                    false,
-                    false,
-                    3
-            )
+
+            proxyHandler = PatchedProxyHandler.builder()
+                .setProxyClient(proxyClient)
+                .setNext(ResponseCodeHandler.HANDLE_404)
+                .build()
         }
 
         void handleRequest(HttpServerExchange exchange) throws Exception {
-            LOG.debug(exchange.toString())
+            if (LOG.traceEnabled) LOG.trace("Handle request. exchange: ${exchange}")
             exchange.responseHeaders.add(HttpString.tryFromString(
-                    'Content-Security-Policy'),
-                    "connect-src 'self' wss://$host https://*.googleapis.com https://apis.google.com"
+                'Content-Security-Policy'),
+                "connect-src 'self' wss://$host https://*.googleapis.com https://apis.google.com"
             )
             exchange.addResponseCommitListener(new ResponseCommitListener() {
                 void beforeCommit(HttpServerExchange ex) {

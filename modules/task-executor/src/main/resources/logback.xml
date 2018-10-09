@@ -5,9 +5,9 @@
         </encoder>
     </appender>
 
-    <logger name="org.openforis" additivity="false" level="DEBUG">
-        <appender-ref ref="STDOUT"/>
-    </logger>
+    <!--<logger name="org.openforis" additivity="false" level="DEBUG">-->
+        <!--<appender-ref ref="STDOUT"/>-->
+    <!--</logger>-->
 
     <root level="INFO">
         <appender-ref ref="STDOUT"/>

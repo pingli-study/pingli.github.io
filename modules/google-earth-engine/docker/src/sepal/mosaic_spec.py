@@ -36,7 +36,7 @@ class MosaicSpec(ImageSpec):
         })
 
     def _ee_image(self):
-        logging.info('Creating mosaic of ' + str(self))
+        logging.debug('Creating mosaic of ' + str(self))
         return Mosaic(self).create(self._data_sets())
 
     @abstractmethod
