@@ -4,6 +4,8 @@ import io.undertow.server.HttpServerExchange
 import io.undertow.server.handlers.ResponseCodeHandler
 import io.undertow.server.handlers.proxy.PatchedLoadBalancingProxyClient
 import org.openforis.sepal.undertow.PatchedProxyHandler
+import org.xnio.OptionMap
+import org.xnio.Options
 
 class Endpoint {
     final String username
@@ -24,8 +26,10 @@ class Endpoint {
             softMaxConnectionsPerThread: 10,
             ttl: 40 * 1000
         )
-        proxyClient.addHost(uri)
+        OptionMap options = OptionMap.builder().set(Options.KEEP_ALIVE, true).map
+        proxyClient.addHost(null, uri, null, null, options)
         proxyHandler = PatchedProxyHandler.builder()
+            .setMaxRequestTime(2 * 60 * 60 * 1000) // Two hours
             .setProxyClient(proxyClient)
             .setNext(ResponseCodeHandler.HANDLE_404)
             .build()

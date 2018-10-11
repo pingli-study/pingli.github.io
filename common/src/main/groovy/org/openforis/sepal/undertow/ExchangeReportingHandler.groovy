@@ -46,7 +46,7 @@ class ExchangeReportingHandler implements HttpHandler {
 
     List<Map> exchangesOlderThan(long maxAge, TemporalUnit temporalUnit) {
         startTimeByExchange.entrySet().toList()
-            .collect { [exchange: it.key, startTime: it.value, foo: it.key.isInIoThread()] }
+            .collect { [exchange: it.key, startTime: it.value] }
             .findAll {
             def duration = Duration.of(maxAge, temporalUnit)
             def now = Instant.ofEpochMilli(System.currentTimeMillis())

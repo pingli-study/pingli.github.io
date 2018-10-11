@@ -167,6 +167,7 @@ class RootHandler implements HttpHandler {
             proxyClient.addHost(URI.create(target), xnioSsl)
 
             proxyHandler = PatchedProxyHandler.builder()
+                .setMaxRequestTime(2 * 60 * 60 * 1000) // Two hours
                 .setProxyClient(proxyClient)
                 .setNext(ResponseCodeHandler.HANDLE_404)
                 .build()
