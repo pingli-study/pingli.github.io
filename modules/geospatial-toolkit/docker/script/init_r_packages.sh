@@ -8,8 +8,10 @@ echo "*****************************************"
 set -e
 # libudunits2-dev required for udunits, needed by mapview
 apt-get install -y \
-    libudunits2-dev
-apt-get build-dep -y r-cran-rmpi
+    libudunits2-dev \
+    r-cran-rmpi \
+    libopenmpi-dev \
+    libgeos++-dev
 
 export JAVA_HOME=/usr/local/lib/sdkman/candidates/java/current
 export JAVA_CPPFLAGS="-I${JAVA_HOME}/include -I${JAVA_HOME}/include/linux"
@@ -21,10 +23,10 @@ R -e "devtools::install_github('appelmar/strucchange')"
 R -e "pacman::p_load_gh(\
         'appelmar/bfast',\
         'loicdtx/bfastSpatial'\
+        'jreiche/bayts'\
     )"
 R -e "pacman::p_load(\
         'corrplot',\
-        'devtools',\
         'dismo',\
         'dplyr',\
         'DT',\
@@ -37,6 +39,7 @@ R -e "pacman::p_load(\
         'knitr',\
         'leaflet',\
         'lubridate',\
+        'maptools',\
         'mapview',\
         'plyr',\
         'random',\
@@ -51,6 +54,7 @@ R -e "pacman::p_load(\
         'rPython',\
         'RSQLite',\
         'RStoolbox',\
+        'sf',\
         'shiny',\
         'shinyBS',\
         'shinycssloaders',\
@@ -58,8 +62,12 @@ R -e "pacman::p_load(\
         'shinyFiles',\
         'shinyjs',\
         'snow',\
+        'sp',\
+        'sqldf',\
         'stringr',\
         'strucchange',\
+        'tictoc',\
+        'tidyr',\
         'xtable',\
         'zoo'\
     )"
