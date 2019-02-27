@@ -5,6 +5,8 @@ echo
 echo "************************************************"
 echo "*** Installing Open Foris Geospatial Toolkit ***"
 echo "************************************************"
+
+# TODO: Add dans-gdal-scripts - this package currently won't install due to broken dependencies
 apt-get install -y \
 	 gcc \
 	 g++ \
@@ -27,7 +29,7 @@ apt-get install -y \
 	 perl \
 	 spatialite-bin
 
-wget http://foris.fao.org/static/geospatialtoolkit/releases/OpenForisToolkit.run
+wget -nv http://foris.fao.org/static/geospatialtoolkit/releases/OpenForisToolkit.run
 chmod u+x OpenForisToolkit.run
 yes 1 | ./OpenForisToolkit.run
 rm OpenForisToolkit.run

@@ -15,16 +15,18 @@ apt-get install -y \
 
 export JAVA_HOME=/usr/local/lib/sdkman/candidates/java/current
 export JAVA_CPPFLAGS="-I${JAVA_HOME}/include -I${JAVA_HOME}/include/linux"
-export JAVA_LD_LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server:${JAVA_HOME}/jre/lib/amd64
+export JAVA_LD_LIBRARY_PATH=${JAVA_HOME}/lib/server:${JAVA_HOME}/lib
 R CMD javareconf
 
+R -e "install.packages('devtools', dependencies=TRUE, repos='http://cran.rstudio.com/')"
 R -e "install.packages('pacman', dependencies=TRUE, repos='http://cran.rstudio.com/')"
 R -e "devtools::install_github('appelmar/strucchange')"
 R -e "pacman::p_load_gh(\
         'appelmar/bfast',\
-        'loicdtx/bfastSpatial'\
+        'loicdtx/bfastSpatial',\
         'jreiche/bayts'\
     )"
+# jreiche/bayts is a dependency of Early Warning System for Canopy Disturbances in Ecuador (SATA)
 R -e "pacman::p_load(\
         'corrplot',\
         'dismo',\

@@ -14,6 +14,7 @@ apt-add-repository ppa:ubuntugis/ubuntugis-unstable -y
 echo "deb https://cloud.r-project.org/bin/linux/ubuntu bionic-cran35/" | tee -a /etc/apt/sources.list
 gpg --keyserver keyserver.ubuntu.com --recv-key E084DAB9
 gpg -a --export E084DAB9 | apt-key add -
+add-apt-repository ppa:marutter/c2d4u3.5
 
 apt-get -y autoclean && apt-get -y clean && apt-get -y autoremove && apt-get -y purge && apt-get -y update && apt-get -y upgrade
 
@@ -61,6 +62,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y --fix-missing \
     libgstreamer-plugins-base1.0-dev \
     libpython3-dev \
     libproj-dev \
+    libspatialindex-dev \
     libssl-dev \
     libxcursor-dev \
     libxinerama-dev \
