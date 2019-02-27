@@ -14,4 +14,8 @@ interface BudgetRepository {
     void updateDefaultBudget(Budget budget)
 
     void updateBudget(String username, Budget budget)
+
+    void saveSpendingReport(Map<String, UserSpendingReport> report)
+
+    Map<String, UserSpendingReport> spendingReport()
 }

@@ -17,19 +17,19 @@ class GenerateSpendingReportHandler implements QueryHandler<Map<String, UserSpen
     private final UserRepository userRepository
 
     GenerateSpendingReportHandler(
-            InstanceSpendingService instanceSpendingService,
-            StorageUseService storageUseService,
-            BudgetRepository budgetRepository,
-            UserRepository userRepository) {
+        InstanceSpendingService instanceSpendingService,
+        StorageUseService storageUseService,
+        BudgetRepository budgetRepository,
+        UserRepository userRepository) {
         userSpendingReportGenerator = new GenerateUserSpendingReportHandler(
-                instanceSpendingService,
-                storageUseService,
-                budgetRepository)
+            instanceSpendingService,
+            storageUseService,
+            budgetRepository)
         this.userRepository = userRepository
     }
 
-    Map<String, UserSessionReport> execute(GenerateSpendingReport query) {
-        def reports = [:]
+    Map<String, UserSpendingReport> execute(GenerateSpendingReport query) {
+        def reports = [:] as Map<String, UserSpendingReport>
         userRepository.eachUsername { username ->
             def report = userSpendingReportGenerator.execute(new GenerateUserSpendingReport(username: username))
             reports[username] = report
