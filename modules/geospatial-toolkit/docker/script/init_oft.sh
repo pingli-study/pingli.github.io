@@ -6,7 +6,6 @@ echo "************************************************"
 echo "*** Installing Open Foris Geospatial Toolkit ***"
 echo "************************************************"
 apt-get install -y \
-     dans-gdal-scripts \
 	 gcc \
 	 g++ \
 	 gdal-bin \
