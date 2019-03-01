@@ -29,7 +29,7 @@ var requestSceneAreas = function (e, state) {
   var data     = {}
   data.dataSet = state.sensorGroup
   SearchRequestUtils.addAoiRequestParameter(state, data)
-  
+
   var params = {
     url         : '/api/data/sceneareas'
     , data      : data
@@ -43,14 +43,14 @@ var requestSceneAreas = function (e, state) {
       })
       state.mosaicPreviewBand = null
       state.scenesPreview     = true
-      
+
       EventBus.dispatch(Events.SECTION.SEARCH.STATE.ACTIVE_CHANGE, null, state, {resetSceneAreas: true})
       EventBus.dispatch(Events.SECTION.REDUCE)
       Loader.hide({delay: 300})
     }
   }
   EventBus.dispatch(Events.AJAX.POST, null, params)
-  
+
 }
 
 EventBus.addEventListener(Events.SECTION.SHOW, show)
@@ -74,11 +74,11 @@ var _loadMosaic = function (id, callback) {
       Loader.show()
     }
     , success   : function (response) {
-      
+
       var state = typeof response === 'string' ? JSON.parse(response) : response
       SepalAois.migrateAoi(state)
       delete state['mosaic']
-      
+
       setTimeout(function () {
         switch (state.type) {
           case Model.TYPES.MOSAIC:
@@ -134,7 +134,7 @@ var cloneMosaic = function (e, id) {
       hideSceneAreas : true,
       isNew          : true
     })
-    
+
     Loader.hide({delay: 1000})
   })
 }
@@ -147,9 +147,9 @@ var deleteMosaic = function (e, id) {
     }
     , success   : function (response) {
       Loader.hide({delay: 1000})
-      
+
       EventBus.dispatch(Events.SECTION.SEARCH.STATE.LIST_CHANGE, null, response)
-      
+
       if (Model.isActive(id)) {
         EventBus.dispatch(Events.SECTION.SEARCH.STATE.ACTIVE_CHANGE, null, null)
       }
@@ -164,7 +164,7 @@ var showList = function () {
 
 // add mosaics
 var addMosaic = function () {
-  
+
   var getDefaultState = function () {
     var date         = moment(new Date())
     var sensors      = Model.getSensors(Model.getSensorGroups()[0])
@@ -176,7 +176,7 @@ var addMosaic = function () {
       aoiName    : null,
       sensorGroup: Model.getSensorGroups()[0],
       targetDate : date.format('YYYY-MM-DD'),
-      
+
       sortWeight           : 0.5,
       sensors              : Object.keys(sensors).filter(function (sensor) {
         return sensors[sensor].selected
@@ -200,7 +200,7 @@ var addMosaic = function () {
 
 //classification
 var addClassification = function () {
-  
+
   var getDefaultState = function () {
     var date         = moment(new Date())
     var defaultState = {
@@ -242,9 +242,9 @@ var requestClassification = function (e, state) {
       state.mosaic        = {mapId: response.mapId, token: response.token}
       EventBus.dispatch(Events.SECTION.SEARCH_RETRIEVE.MOSAIC_LOADED, null, state.mosaic.mapId, state.mosaic.token)
       EventBus.dispatch(Events.SECTION.SEARCH.STATE.ACTIVE_CHANGE, null, state)
-      
+
       EventBus.dispatch(Events.SECTION.REDUCE)
-      
+
       Loader.hide({delay: 500})
     }
   }
@@ -255,7 +255,7 @@ var retrieveClassification = function (e, state, obj) {
   var data         = classificationRequestData(state)
   data.name        = obj.name
   data.destination = obj.destination
-  
+
   var params = {
     url         : '/api/data/classification/retrieve'
     , data      : data
@@ -263,7 +263,7 @@ var retrieveClassification = function (e, state, obj) {
       setTimeout(function () {
         EventBus.dispatch(Events.ALERT.SHOW_INFO, null, 'The download will start shortly.<br/>You can monitor the progress in the task manager')
       }, 100)
-      
+
       EventBus.dispatch(Events.SECTION.SEARCH_RETRIEVE.COLLAPSE_VIEW)
     }
     , success   : function (e) {
@@ -275,7 +275,7 @@ var retrieveClassification = function (e, state, obj) {
 
 //change detection
 var addChangeDetection = function () {
-  
+
   var getDefaultState = function () {
     var date         = moment(new Date())
     var defaultState = {
@@ -320,9 +320,9 @@ var requestChangeDetection = function (e, state) {
       state.mosaic        = {mapId: response.mapId, token: response.token}
       EventBus.dispatch(Events.SECTION.SEARCH_RETRIEVE.MOSAIC_LOADED, null, state.mosaic.mapId, state.mosaic.token)
       EventBus.dispatch(Events.SECTION.SEARCH.STATE.ACTIVE_CHANGE, null, state)
-      
+
       EventBus.dispatch(Events.SECTION.REDUCE)
-      
+
       Loader.hide({delay: 500})
     }
   }
@@ -333,7 +333,7 @@ var retrieveChangeDetection = function (e, state, obj) {
   var data         = changeDetectionRequestData(state)
   data.name        = obj.name
   data.destination = obj.destination
-  
+
   var params = {
     url         : '/api/data/change-detection/retrieve'
     , data      : data
@@ -341,7 +341,7 @@ var retrieveChangeDetection = function (e, state, obj) {
       setTimeout(function () {
         EventBus.dispatch(Events.ALERT.SHOW_INFO, null, 'The download will start shortly.<br/>You can monitor the progress in the task manager')
       }, 100)
-      
+
       EventBus.dispatch(Events.SECTION.SEARCH_RETRIEVE.COLLAPSE_VIEW)
     }
     , success   : function (e) {
@@ -353,7 +353,7 @@ var retrieveChangeDetection = function (e, state, obj) {
 
 //time series
 var addTimeSeries = function () {
-  
+
   var getDefaultState = function () {
     var date         = moment(new Date())
     var defaultState = {
@@ -375,13 +375,16 @@ var addTimeSeries = function () {
 }
 
 var getRequestTimeSeriesData = function (state) {
-  
+
   switch (state.indicator) {
     case 'NDVI' :
       state.expression = '10000 * (1 + (i.nir - i.red) / (i.nir + i.red))'
       break
     case 'NDMI' :
       state.expression = '10000 * (1 + (i.nir - i.swir1) / (i.nir + i.swir1))'
+      break
+    case 'NBR' :
+      state.expression = '10000 * (1 + (i.nir - i.swir2) / (i.nir + i.swir2))'
       break
     case 'EVI' :
       state.expression = '10000 * (1 + 2.5 * (i.nir - i.red) / (i.nir + 6 * i.red - 7.5 * i.blue + 1))'
@@ -390,9 +393,9 @@ var getRequestTimeSeriesData = function (state) {
       state.expression = '10000 * (1 + 2.5 * (i.nir - i.red) / (i.nir + 2.4 * i.red + 1))'
       break
   }
-  
+
   state.title = 'Download time-series: \'' + state.description + '\''
-  
+
   return {
     operation: 'sepal.timeseries.download',
     params   : state
@@ -401,7 +404,7 @@ var getRequestTimeSeriesData = function (state) {
 
 var requestTimeSeries = function (e, state) {
   var data = getRequestTimeSeriesData(state)
-  
+
   var params = {
     url          : '/api/tasks'
     , data       : JSON.stringify(data)
