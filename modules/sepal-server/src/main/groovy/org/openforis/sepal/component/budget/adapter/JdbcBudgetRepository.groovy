@@ -141,9 +141,9 @@ class JdbcBudgetRepository implements BudgetRepository {
         def report = [:]
         sql.rows('''
             SELECT b.username, 
-                   IFNULL(s.instance_spending, 0), 
-                   IFNULL(s.storage_spending, 0), 
-                   IFNULL(s.storage_usage, 0), 
+                   IFNULL(s.instance_spending, 0) instance_spending, 
+                   IFNULL(s.storage_spending, 0) storage_spending, 
+                   IFNULL(s.storage_usage, 0) storage_usage, 
                    IFNULL(b.monthly_instance, d.monthly_instance) monthly_instance,
                    IFNULL(b.monthly_storage, d.monthly_storage) monthly_storage,
                    IFNULL(b.storage_quota, d.storage_quota) storage_quota
