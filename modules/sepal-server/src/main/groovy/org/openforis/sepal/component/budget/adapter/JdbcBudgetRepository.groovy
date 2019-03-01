@@ -144,9 +144,9 @@ class JdbcBudgetRepository implements BudgetRepository {
                    IFNULL(b.monthly_instance, d.monthly_instance) monthly_instance,
                    IFNULL(b.monthly_storage, d.monthly_storage) monthly_storage,
                    IFNULL(b.storage_quota, d.storage_quota) storage_quota
-            FROM user_spending s
+            FROM user_budget b
             JOIN default_user_budget d
-            LEFT JOIN user_budget b ON s.username = b.username
+            LEFT JOIN user_spending s ON s.username = b.username
             ''').each {
             report[it.username] = new UserSpendingReport(
                 username: it.username,
