@@ -30,7 +30,7 @@ class MosaicSpec(ImageSpec):
 
     def _viz_params(self):
         viz_by_band = _sr_viz_by_bands if self.surface_reflectance else _toa_viz_by_bands
-        return viz_by_band[', '.join(self.bands)]({
+        return viz_by_band[','.join(self.bands)]({
             'from_days_since_epoch': self.from_date / _milis_per_day,
             'to_days_since_epoch': self.to_date / _milis_per_day
         })
