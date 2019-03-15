@@ -38,27 +38,27 @@ var init = function (parent) {
   parentContainer = parent
   var container   = parentContainer.find('.mosaic-preview')
   container.append(html)
-  
+
   formNotify   = html.find('.form-notify')
   rowLandsat   = html.find('.row-LANDSAT')
   rowSentinel2 = html.find('.row-SENTINEL2')
-  
+
   btnSubmit        = html.find('.btn-submit')
   btnPanSharpening = html.find('.btn-pan-sharpening')
-  
+
   inputBandsLandsat = html.find('input[name=bands-landsat]')
   inputBandsLandsat.sepalAutocomplete({
     lookup    : landsatBands
     , onChange: onBandsSelectionChange
   })
-  
+
   //sentinel2
   inputBandsSentinel2 = html.find('input[name=bands-sentinel2]')
   inputBandsSentinel2.sepalAutocomplete({
     lookup    : sentinel2Bands
     , onChange: onBandsSelectionChange
   })
-  
+
   btnPanSharpening.click(function () {
     btnPanSharpening.toggleClass('active')
     if (btnPanSharpening.hasClass('active'))
@@ -66,11 +66,11 @@ var init = function (parent) {
     else
       state.panSharpening = false
   })
-  
+
   btnSubmit.click(function (e) {
     e.preventDefault()
     FormValidator.resetFormErrors(html)
-    
+
     if (state.mosaicPreviewBand) {
       state.mosaicPreview = true
       EventBus.dispatch(Events.SECTION.SEARCH_RETRIEVE.PREVIEW_MOSAIC, null, state)
@@ -80,7 +80,7 @@ var init = function (parent) {
       formNotify.html('A valid band must be selected').velocitySlideDown({delay: 20, duration: 400})
     }
   })
-  
+
 }
 
 var hide = function (options) {
@@ -101,7 +101,7 @@ var reset = function () {
 var setActiveState = function (e, activeState) {
   reset()
   state = activeState
-  
+
   if (state && state.sensorGroup) {
     html.find('.row-' + state.sensorGroup).show()
     if (state.mosaicPreviewBand) {
@@ -113,12 +113,12 @@ var setActiveState = function (e, activeState) {
     } else {
       enableDateBands()
     }
-    
+
     if (state.panSharpening)
       btnPanSharpening.addClass('active')
     else
       btnPanSharpening.removeClass('active')
-    
+
     updatePanSharpeningBtnState()
   }
 }
@@ -127,18 +127,19 @@ var updatePanSharpeningBtnState = function () {
   var disablePanSharpeningBtn = function () {
     btnPanSharpening.removeClass('active')
     btnPanSharpening.disable()
-    state.panSharpening = false
+    if (state)
+      state.panSharpening = false
   }
-  
+
   if (state.mosaicPreviewBand && state.sensorGroup === 'LANDSAT') {
     var band          = R.find(R.propEq('data', state.mosaicPreviewBand))(landsatBands)
     var selectedBands = SceneSelection.getUniqueImageSelectionBands()
-    band.panSharpening && R.contains('pan', selectedBands)
+    band && band.panSharpening && R.contains('pan', selectedBands)
       ? btnPanSharpening.enable()
       : disablePanSharpeningBtn()
   } else
     disablePanSharpeningBtn()
-  
+
   if(state.surfaceReflectance)
     disablePanSharpeningBtn()
 }
@@ -155,24 +156,24 @@ var disableDateBands = function () {
   var excludeDates = function (band) {
     return band.date !== true
   }
-  
+
   inputBandsLandsat.sepalAutocomplete('dispose')
   inputBandsSentinel2.sepalAutocomplete('dispose')
-  
+
   inputBandsLandsat.sepalAutocomplete({
     lookup    : landsatBands.filter(excludeDates)
     , onChange: onBandsSelectionChange
   })
-  
+
   inputBandsSentinel2.sepalAutocomplete({
     lookup    : sentinel2Bands.filter(excludeDates)
     , onChange: onBandsSelectionChange
   })
-  
+
   if (state.mosaicPreviewBand) {
     setBandValue(landsatBands, inputBandsLandsat)
     setBandValue(sentinel2Bands, inputBandsSentinel2)
-    
+
     $.each(landsatBands.filter(function (band) {
       return band.date === true
     }), function (i, band) {
@@ -196,19 +197,19 @@ var disableDateBands = function () {
 var enableDateBands = function () {
   inputBandsLandsat.sepalAutocomplete('dispose')
   inputBandsSentinel2.sepalAutocomplete('dispose')
-  
+
   inputBandsLandsat.sepalAutocomplete({
     lookup    : landsatBands
     , onChange: onBandsSelectionChange
   })
-  
+
   //sentinel2
   inputBandsSentinel2 = html.find('input[name=bands-sentinel2]')
   inputBandsSentinel2.sepalAutocomplete({
     lookup    : sentinel2Bands
     , onChange: onBandsSelectionChange
   })
-  
+
   setBandValue(landsatBands, inputBandsLandsat)
   setBandValue(sentinel2Bands, inputBandsSentinel2)
 }
