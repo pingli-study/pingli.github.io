@@ -1,13 +1,13 @@
 from glob import glob
 
-import osgeo.gdal
+from osgeo import gdal
 
 from ..task.task import ThreadTask
 
 
 class BuildVrt(ThreadTask):
     def __init__(self, output_file, files):
-        super(BuildVrt, self).__init__()
+        super(BuildVrt, self).__init__(retries=3)
         self.output_file = output_file
         self.files = files
 
@@ -16,7 +16,8 @@ class BuildVrt(ThreadTask):
             files = glob(self.files)
         else:
             files = self.files
-        vrt = osgeo.gdal.BuildVRT(self.output_file, files)
+        gdal.SetConfigOption('VRT_SHARED_SOURCE', '0')
+        vrt = gdal.BuildVRT(self.output_file, files)
         if vrt:
             vrt.FlushCache()
         self.resolve()
