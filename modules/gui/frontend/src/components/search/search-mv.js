@@ -378,19 +378,22 @@ var getRequestTimeSeriesData = function (state) {
 
   switch (state.indicator) {
     case 'NDVI' :
-      state.expression = '10000 * (1 + (i.nir - i.red) / (i.nir + i.red))'
+      state.expression = '10000 * (i.nir - i.red) / (i.nir + i.red)'
       break
     case 'NDMI' :
-      state.expression = '10000 * (1 + (i.nir - i.swir1) / (i.nir + i.swir1))'
+      state.expression = '10000 * (i.nir - i.swir1) / (i.nir + i.swir1)'
       break
     case 'NBR' :
-      state.expression = '10000 * (1 + (i.nir - i.swir2) / (i.nir + i.swir2))'
+      state.expression = '10000 * (i.nir - i.swir2) / (i.nir + i.swir2)'
       break
     case 'EVI' :
-      state.expression = '10000 * (1 + 2.5 * (i.nir - i.red) / (i.nir + 6 * i.red - 7.5 * i.blue + 1))'
+      state.expression = '10000 * 2.5 * (i.nir - i.red) / (i.nir + 6 * i.red - 7.5 * i.blue + 1)'
       break
     case 'EVI2' :
-      state.expression = '10000 * (1 + 2.5 * (i.nir - i.red) / (i.nir + 2.4 * i.red + 1))'
+      state.expression = '10000 * 2.5 * (i.nir - i.red) / (i.nir + 2.4 * i.red + 1)'
+      break
+    case 'SAVI' :
+      state.expression = '10000 * 1.5 * (i.nir - i.red) / (i.nir + i.red + 0.5)'
       break
   }
 

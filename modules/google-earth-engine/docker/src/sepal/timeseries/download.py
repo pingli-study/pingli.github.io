@@ -11,7 +11,7 @@ from os.path import abspath
 from os.path import isdir, join
 
 import ee
-import osgeo.gdal
+from osgeo import gdal
 from dateutil.parser import parse
 
 from timeseries import TimeSeries
@@ -199,7 +199,9 @@ class DownloadFeature(ThreadTask):
         tile_dirs = sorted([d for d in glob(join(self.feature_dir, '*')) if isdir(d)])
         for tile_dir in tile_dirs:
             self._tile_to_vrt(tile_dir)
-        vrt = osgeo.gdal.BuildVRT(
+
+        gdal.SetConfigOption('VRT_SHARED_SOURCE', '0')
+        vrt = gdal.BuildVRT(
             self.feature_dir + '/stack.vrt', sorted(glob(join(self.feature_dir, '*.vrt'))),
             VRTNodata=0
         )
@@ -209,12 +211,13 @@ class DownloadFeature(ThreadTask):
     def _tile_to_vrt(self, tile_dir):
         tif_paths = sorted(glob(join(tile_dir, '*.tif')))
         for tif_path in tif_paths:
-            tif_file = osgeo.gdal.Open(tif_path)
+            tif_file = gdal.Open(tif_path)
             tif_path_no_extension = os.path.splitext(tif_path)[0]
             if tif_file:
                 for band_index in range(1, tif_file.RasterCount + 1):
                     tif_vrt_path = '{0}_{1}.vrt'.format(tif_path_no_extension, str(band_index).zfill(10))
-                    vrt = osgeo.gdal.BuildVRT(
+                    gdal.SetConfigOption('VRT_SHARED_SOURCE', '0')
+                    vrt = gdal.BuildVRT(
                         tif_vrt_path, tif_path,
                         bandList=[band_index],
                         VRTNodata=0)
@@ -222,7 +225,8 @@ class DownloadFeature(ThreadTask):
                         vrt.FlushCache()
         stack_vrt_path = tile_dir + '_stack.vrt'
         vrt_paths = sorted(glob(join(tile_dir, '*.vrt')))
-        vrt = osgeo.gdal.BuildVRT(
+        gdal.SetConfigOption('VRT_SHARED_SOURCE', '0')
+        vrt = gdal.BuildVRT(
             stack_vrt_path, vrt_paths,
             separate=True,
             VRTNodata=0)

@@ -37,9 +37,9 @@ class TimeSeries(object):
             )
 
         stack = ee.Image(
-            collection.iterate(append_band, ee.Image().uint16())
+            collection.iterate(append_band, ee.Image().int16())
         )
-        return stack.slice(1).clip(aoi).uint16()
+        return stack.slice(1).clip(aoi).int16()
 
     def _to_daily_mosaics(self, collection):
         def evaluate_expression(image):
