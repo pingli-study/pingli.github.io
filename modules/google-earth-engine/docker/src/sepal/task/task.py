@@ -23,7 +23,7 @@ class Task(object):
     REJECTED = 'REJECTED'
     CANCELED = 'CANCELED'
 
-    def __init__(self):
+    def __init__(self, semaphore=None):
         super(Task, self).__init__()
         self._state_lock = threading.Lock()
         self._close_lock = threading.Lock()
@@ -35,16 +35,20 @@ class Task(object):
         self._dependee = None
         self._dependents = []
         self._event_queue = queue.Queue()
+        self._semaphore = semaphore
+        self._semaphore_lock = threading.Lock()
+        self._acquired_semaphore = False
 
     # noinspection PyUnusedLocal
     def submit(self, *args):
         if not self._set_state(Task.SUBMITTED, lambda state: state == Task.UNSUBMITTED):
-            return
+            return Promise()
         self._enqueue({'type': Task.SUBMITTED})
         # noinspection PyTypeChecker
         return Promise(self._start)
 
     def resolve(self, value=None):
+        self._release_semaphore()
         if not self._set_state(Task.RESOLVED, lambda state: state in [Task.UNSUBMITTED, Task.SUBMITTED, Task.RUNNING]):
             return
 
@@ -55,6 +59,7 @@ class Task(object):
             self._close()
 
     def reject(self, exception):
+        self._release_semaphore()
         if not self._set_state(Task.REJECTED, lambda state: state in [Task.UNSUBMITTED, Task.SUBMITTED, Task.RUNNING]):
             return
         self._exception = exception
@@ -66,6 +71,7 @@ class Task(object):
             self._close()
 
     def cancel(self):
+        self._release_semaphore()
         if not self._set_state(Task.CANCELED, lambda state: state in [Task.UNSUBMITTED, Task.SUBMITTED, Task.RUNNING]):
             return
         try:
@@ -136,11 +142,14 @@ class Task(object):
         raise AssertionError('Method in subclass expected to have been invoked')
 
     def _run_and_catch(self):
-        if not self._set_state(Task.RUNNING, lambda state: state == Task.SUBMITTED):
-            return
         try:
+            self._acquire_semaphore()
+            if not self._set_state(Task.RUNNING, lambda state: state == Task.SUBMITTED):
+                return
             self.run()
         except Exception:
+            self._release_semaphore()
+            logger.exception('Failed to execute task {0}'.format(self))
             self.reject(re_raisable())
         finally:
             if self.state != Task.RUNNING:
@@ -179,6 +188,21 @@ class Task(object):
             if dependee_lock:
                 dependee_lock.release()
 
+    def _acquire_semaphore(self):
+        if (self.submitted() or self.running()) and self._semaphore:
+            logger.info('Trying to acquire semaphore: {0}, {1}'.format(self, self._semaphore))
+            self._semaphore.acquire()
+            logger.info('Acquired semaphore: {0}, {1}'.format(self, self._semaphore))
+            self._acquired_semaphore= True
+
+    def _release_semaphore(self):
+        self._semaphore_lock.acquire()
+        if self._semaphore and self._acquired_semaphore:
+            self._semaphore.release()
+            logger.info('Released semaphore: {0}, {1}'.format(self, self._semaphore))
+            self._acquired_semaphore = False
+        self._semaphore_lock.release()
+
     class Canceled(Exception):
         pass
 
@@ -210,8 +234,8 @@ import multiprocessing
 
 
 class ProcessTask(Task):
-    def __init__(self):
-        super(ProcessTask, self).__init__()
+    def __init__(self, semaphore=None):
+        super(ProcessTask, self).__init__(semaphore)
         self._process = None
 
     def _start(self, resolve, reject):
@@ -287,8 +311,8 @@ class ProcessTask(Task):
 
 
 class ThreadTask(Task):
-    def __init__(self, name=None):
-        super(ThreadTask, self).__init__()
+    def __init__(self, name=None, semaphore=None):
+        super(ThreadTask, self).__init__(semaphore)
         self._thread = threading.Thread(
             name=name,
             target=self._run_and_catch)

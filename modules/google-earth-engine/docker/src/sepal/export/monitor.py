@@ -1,9 +1,11 @@
 import logging
+import random
+import time
 
 import ee
-import time
 from ee.batch import Task
 
+from ..retry import retry
 from ..task.task import ThreadTask
 
 logger = logging.getLogger(__name__)
@@ -32,27 +34,36 @@ class MonitorEarthEngineExportTask(ThreadTask):
         ee.InitializeThread(self.credentials)
         while self.running():
             time.sleep(10)
-            task = find_task(self.task_id)
-            status = task.status()
-            state = status['state']
-            if state == Task.State.READY:
-                self._update_state(State.PENDING)
-            elif state == Task.State.RUNNING:
-                self._update_state(State.ACTIVE)
-            elif state == Task.State.COMPLETED:
-                self._update_state(State.COMPLETED)
-                self.resolve()
-                return
-            else:
-                error_message = status[
-                    'error_message'] if state == Task.State.FAILED else 'Earth Engine export was canceled'
-                self._status = {
-                    'state': State.FAILED,
-                    'message': error_message
-                }
-                raise Exception(
-                    error_message if error_message else 'Earth Engine export failed'
-                )
+            self.check()
+
+    def check(self):
+        if not self.running():
+            return
+        status = retry(lambda: self.load_status(), 'Load GEE background task status', 10)
+        state = status['state']
+        if state == Task.State.READY:
+            self._update_state(State.PENDING)
+        elif state == Task.State.RUNNING:
+            self._update_state(State.ACTIVE)
+        elif state == Task.State.COMPLETED:
+            self._update_state(State.COMPLETED)
+            self.resolve()
+            return
+        else:
+            error_message = status[
+                'error_message'] if state == Task.State.FAILED else 'Earth Engine export was canceled'
+            self._status = {
+                'state': State.FAILED,
+                'message': error_message
+            }
+            logger.exception('Earth Engine export failed')
+            raise Exception(
+                error_message if error_message else 'Earth Engine export failed'
+            )
+
+    def load_status(self):
+        task = find_task(self.task_id)
+        return task.status()
 
     def status(self):
         return self._status
@@ -68,7 +79,7 @@ class MonitorEarthEngineExportTask(ThreadTask):
         if state == State.FAILED:
             return 'Export failed: {}'.format(self.status()['message'])
 
-    def close(self):
+    def close(self, retry=0):
         try:
             ee.InitializeThread(self.credentials)
             task = find_task(self.task_id)
@@ -77,6 +88,10 @@ class MonitorEarthEngineExportTask(ThreadTask):
                 task.cancel()
         except ee.EEException as e:
             logger.warn('Failed to cancel task {0}: {1}'.format(self, e))
+            if retry < 3:
+                throttle_seconds = max(2 ^ retry * random.uniform(0.1, 0.2), 30)
+                time.sleep(throttle_seconds)
+                self.close(retry + 1)
 
     def _update_state(self, state):
         previous_state = self._status['state']

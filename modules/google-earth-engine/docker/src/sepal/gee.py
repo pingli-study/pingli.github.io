@@ -2,9 +2,12 @@ import json
 
 import ee
 import sys
+from threading import Semaphore
 from flask import request
 from oauth2client.client import OAuth2Credentials
 from oauth2client.service_account import ServiceAccountCredentials
+
+export_semaphore = Semaphore(5)
 
 service_account_credentials = ServiceAccountCredentials.from_p12_keyfile(
     service_account_email=sys.argv[1],

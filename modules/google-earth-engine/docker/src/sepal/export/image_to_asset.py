@@ -5,6 +5,7 @@ import ee
 import monitor
 from monitor import MonitorEarthEngineExportTask
 from ..task.task import ThreadTask
+from ..gee import export_semaphore
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ class ImageToAsset(ThreadTask):
             region,
             scale,
             maxPixels=1e12):
-        super(ImageToAsset, self).__init__()
+        super(ImageToAsset, self).__init__(semaphore=export_semaphore)
         self.credentials = credentials
         self.image = image
         self.description = description

@@ -117,6 +117,8 @@ class DownloadFeatures(ThreadTask):
         return str(self.status())
 
     def close(self):
+        for task in self.download_tasks:
+            task.cancel()
         if self.drive_folder:
             drive.delete(self.spec.credentials, self.drive_folder)
 
@@ -170,6 +172,10 @@ class DownloadFeature(ThreadTask):
 
     def status_message(self):
         return str(self.status())
+
+    def close(self):
+        for task in self.download_tasks:
+            task.cancel()
 
     def _preprocess_feature(self, value):
         if not self._create_dates_csv():
@@ -298,7 +304,7 @@ class DownloadYear(ThreadTask):
                 scale=30,
                 maxPixels=1e12,
                 shardSize=256,
-                fileDimensions=4096
+                fileDimensions=1024
             ))
         self._image_download = self.dependent(
             Download(
