@@ -2,6 +2,7 @@ import ee
 
 from ..image_spec import ImageSpec
 from ..aoi import Geometry
+from ..gee import get_info
 
 
 class Asset(ImageSpec):
@@ -10,8 +11,8 @@ class Asset(ImageSpec):
         image = ee.Image(spec['id'])
         self.image = image
         self.aoi = Geometry(image.geometry())
-        self.scale = image.projection().nominalScale().getInfo()
-        self.bands = image.bandNames().getInfo()
+        self.scale = get_info(image.projection().nominalScale())
+        self.bands = get_info(image.bandNames())
 
     def _ee_image(self):
         return self.image

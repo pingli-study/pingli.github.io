@@ -5,7 +5,7 @@ import ee
 import monitor
 from monitor import MonitorEarthEngineExportTask
 from ..task.task import ThreadTask
-from ..gee import export_semaphore
+from ..gee import export_semaphore, get_info
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ class ImageToDrive(ThreadTask):
             image=self.image,
             description=self.description,
             folder=self.folder,
-            region=self.region.bounds().getInfo()['coordinates'],
+            region=get_info(self.region.bounds())['coordinates'],
             crs='EPSG:4326',
             scale=self.scale,
             maxPixels=self.maxPixels,

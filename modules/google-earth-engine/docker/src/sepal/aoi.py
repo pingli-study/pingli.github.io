@@ -1,4 +1,5 @@
 import ee
+from gee import get_info
 
 
 class Aoi:
@@ -44,10 +45,11 @@ class Aoi:
         if data_set not in self._fusion_table_by_data_set:
             raise ValueError('Unsupported data set: ' + data_set)
         table = self._fusion_table_by_data_set[data_set]
-        scene_area_table = ee.FeatureCollection(table['table_id']) \
-            .filterBounds(self._geometry) \
-            .toList(1e6) \
-            .getInfo()
+        scene_area_table = get_info(
+            ee.FeatureCollection(table['table_id'])
+            .filterBounds(self._geometry)
+            .toList(1e6)
+        )
         scene_areas = []
         for scene_area in scene_area_table:
             polygon = map(lambda lnglat: list(reversed(lnglat)), table['coordinates'](scene_area))
@@ -60,7 +62,7 @@ class Aoi:
 
     def geometry(self):
         """Gets the ee.Geometry of this Aoi.
-    
+
         :return: The ee.Geometry
         :rtype: ee.Geometry
         """
@@ -83,7 +85,7 @@ class FusionTable(Aoi):
         self.key_column = spec['keyColumn']
         self.key_value = spec['keyValue']
         table = ee.FeatureCollection('ft:' + self.table_name)
-        if table.limit(0).getInfo()['columns'][self.key_column] == 'Number':
+        if get_info(table.limit(0))['columns'][self.key_column] == 'Number':
             self.key_value = float(self.key_value)
         aoi = table.filter(ee.Filter.eq(self.key_column, self.key_value))
         geometry = aoi.geometry()

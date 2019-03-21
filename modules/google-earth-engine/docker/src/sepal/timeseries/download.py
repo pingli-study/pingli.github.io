@@ -22,6 +22,7 @@ from ..export.image_to_drive import ImageToDrive
 from ..export.table_to_drive import TableToDrive
 from ..format import format_bytes
 from ..task.task import ThreadTask, Task
+from ..gee import get_info
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,7 @@ class DownloadFeatures(ThreadTask):
             aois = [
                 ee.Feature(
                     feature_collection.filterMetadata('system:index', 'equals', feature_index).first()).geometry()
-                for feature_index in feature_collection.aggregate_array('system:index').getInfo()
+                for feature_index in get_info(feature_collection.aggregate_array('system:index'))
             ]
         else:
             aois = [self.spec.aoi]
@@ -276,7 +277,7 @@ class DownloadYear(ThreadTask):
         time_series = TimeSeries(self._spec)
         stack = time_series.stack
         dates = time_series.dates
-        if not dates.size().getInfo():
+        if not get_info(dates.size()):
             return self.resolve()
 
         self._table_export = self.dependent(
